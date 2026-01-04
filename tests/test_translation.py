@@ -1,5 +1,4 @@
 import json
-import pytest
 from fluxlate.main import translate_text, _structured_prompt
 
 
