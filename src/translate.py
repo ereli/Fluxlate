@@ -11,6 +11,7 @@ the translation even if the model adds extra text.
 from __future__ import annotations
 import json
 import pathlib
+from typing import Any
 import ollama
 import polib
 import typer
@@ -64,34 +65,34 @@ def translate_text(text: str, target_lang: str, verbose: bool = False) -> str:
         payload = json.loads(response_text)
 
         # Handle various LLM output quirks
+        translation = None
         if isinstance(payload, dict):
             translation = payload.get("translation")
-            if translation is None:
-                # LLM might have used a different key or returned the whole object
-                if "source" in payload and len(payload) == 1:
-                    # Some models might swap keys if confused
-                    translation = payload["source"]
-                else:
-                    # Fallback to choosing the first string value found
-                    for val in payload.values():
-                        if isinstance(val, str):
-                            translation = val
-                            break
 
-            if isinstance(translation, dict):
-                # If it's still a dict, try to get a string from it
-                for val in translation.values():
-                    if isinstance(val, str):
-                        translation = val
-                        break
+            # If translation is missing or not a string, search the whole payload
+            if not isinstance(translation, str):
+                # Helper to find any string in a nested structure
+                def find_string(obj: Any) -> str | None:
+                    if isinstance(obj, str):
+                        return obj
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            # Check value
+                            res = find_string(v)
+                            if res:
+                                return res
+                            # Check key (some models put translation in keys)
+                            if isinstance(k, str) and len(k) > 5:  # basic heuristic
+                                return k
+                    return None
+
+                translation = find_string(payload)
 
         elif isinstance(payload, str):
             translation = payload
-        else:
-            translation = str(payload)
 
-        # Final safety check: ensure we return a string
-        if not isinstance(translation, str):
+        # Final safety check: ensure we return a string and it's not the JSON itself
+        if not isinstance(translation, str) or translation == response_text:
             translation = text
 
         if verbose:
